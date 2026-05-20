@@ -60,6 +60,61 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/orders/admin/stats - Admin route to get sales statistics
+router.get('/admin/stats', verifyToken, async (req, res) => {
+  try {
+    const [
+      revenueRes,
+      todayRes,
+      weekRes,
+      monthRes,
+      dailyRes,
+      topProductsRes
+    ] = await Promise.all([
+      db.query("SELECT COALESCE(SUM(total_amount), 0)::float as total_revenue FROM orders WHERE status != 'cancelled'"),
+      db.query("SELECT COUNT(id)::int as count FROM orders WHERE status != 'cancelled' AND created_at >= NOW() - INTERVAL '1 day'"),
+      db.query("SELECT COUNT(id)::int as count FROM orders WHERE status != 'cancelled' AND created_at >= NOW() - INTERVAL '7 days'"),
+      db.query("SELECT COUNT(id)::int as count FROM orders WHERE status != 'cancelled' AND created_at >= NOW() - INTERVAL '30 days'"),
+      db.query(`
+        SELECT 
+          TO_CHAR(created_at, 'YYYY-MM-DD') as date,
+          COUNT(id)::int as count,
+          COALESCE(SUM(total_amount), 0)::float as revenue
+        FROM orders 
+        WHERE status != 'cancelled' AND created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+        ORDER BY date ASC
+      `),
+      db.query(`
+        SELECT 
+          product_name,
+          SUM(quantity)::int as total_quantity,
+          SUM(price * quantity)::float as total_revenue
+        FROM order_items
+        JOIN orders ON order_items.order_id = orders.id
+        WHERE orders.status != 'cancelled'
+        GROUP BY product_name
+        ORDER BY total_quantity DESC
+        LIMIT 10
+      `)
+    ]);
+
+    res.json({
+      data: {
+        totalRevenue: revenueRes.rows[0].total_revenue,
+        todaySalesCount: todayRes.rows[0].count,
+        weekSalesCount: weekRes.rows[0].count,
+        monthSalesCount: monthRes.rows[0].count,
+        dailyStats: dailyRes.rows,
+        topProducts: topProductsRes.rows
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching dashboard stats:', { err: error.message });
+    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+  }
+});
+
 // GET /api/orders/admin - Admin route to get all orders with items
 router.get('/admin/all', verifyToken, async (req, res) => {
   try {

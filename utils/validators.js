@@ -9,6 +9,7 @@ const loginSchema = z.object({
 const otpSchema = z.object({
   email: z.string().email().max(255).trim(),
   otp: z.string().length(6).regex(/^\d{6}$/, 'OTP must be 6 digits'),
+  rememberMe: z.boolean().optional(),
 });
 
 const productSchema = z.object({

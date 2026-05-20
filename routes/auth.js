@@ -21,9 +21,9 @@ function generateOTP() {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-function signAccessToken(payload) {
+function signAccessToken(payload, expiresIn) {
   return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+    expiresIn: expiresIn || process.env.JWT_EXPIRES_IN || '30d',
     algorithm: 'HS512',
   });
 }
@@ -128,7 +128,7 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
 
 // ── POST /api/auth/verify-otp ────────────────────────────────────────────────
 router.post('/verify-otp', authLimiter, validate(otpSchema), async (req, res) => {
-  const { email, otp } = req.body;
+  const { email, otp, rememberMe } = req.body;
 
   try {
     const userResult = await pool.query(
@@ -163,7 +163,8 @@ router.post('/verify-otp', authLimiter, validate(otpSchema), async (req, res) =>
 
     // Issue tokens
     const payload      = { userId: user.id, email };
-    const accessToken  = signAccessToken(payload);
+    const expiresIn    = rememberMe ? '7d' : '24h';
+    const accessToken  = signAccessToken(payload, expiresIn);
     const refreshToken = signRefreshToken(payload);
     const rtExpiry     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
